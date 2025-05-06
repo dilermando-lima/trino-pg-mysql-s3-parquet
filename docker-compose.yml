@@ -1,0 +1,96 @@
+services:
+
+  trino-pg:
+    image: postgres:16
+    container_name: trino_pg
+    environment:
+      POSTGRES_USER: user1
+      POSTGRES_PASSWORD: pass1
+      POSTGRES_DB: pgtrino
+    ports:
+      - "3344:5432"
+    volumes:
+      - ./config/pg/database-script.sql:/docker-entrypoint-initdb.d/database-script.sql
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  trino-s3:
+    container_name: trino_s3
+    image: localstack/localstack:4.3.0
+    ports:
+      - "4566:4566" # s3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - SERVICES=s3
+      - EDGE_PORT=4566
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - "./config/s3/init-s3.py:/etc/localstack/init/ready.d/init-s3.py"
+    # docker exec trino_s3 aws --endpoint-url=http://localhost:4566 s3 ls s3://bucket1/ --recursive
+
+  trino-mysql:
+    image: mysql:9.3
+    container_name: trino_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root2
+      MYSQL_DATABASE: db2
+      MYSQL_USER: user2
+      MYSQL_PASSWORD: pass2
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./config/mysql/database-script.sql:/docker-entrypoint-initdb.d/init.sql
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+
+  trino-coordinator: 
+    image: trinodb/trino:475
+    container_name: trino_coordinator
+    ports:
+      - "8091:8091"
+    volumes:
+      # config
+      - ./config/coordinator/jvm.config:/etc/trino/jvm.config
+      - ./config/coordinator/config.properties:/etc/trino/config.properties
+      - ./config/coordinator/node.properties:/etc/trino/node.properties
+      - ./config/coordinator/log.properties:/etc/trino/log.properties
+      # catalog
+      - ./config/catalog/pg.properties:/etc/trino/catalog/pg.properties
+      - ./config/catalog/s3.properties:/etc/trino/catalog/s3.properties
+      - ./config/catalog/mysql.properties:/etc/trino/catalog/mysql.properties 
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - trino-mysql
+      - trino-pg
+      - trino-s3
+
+  trino-worker:
+    image: trinodb/trino:475
+    deploy:
+      replicas: 1
+    volumes:
+      # config
+      - ./config/worker/jvm.config:/etc/trino/jvm.config
+      - ./config/worker/config.properties:/etc/trino/config.properties
+      - ./config/worker/node.properties:/etc/trino/node.properties
+      - ./config/worker/log.properties:/etc/trino/log.properties
+      # catalog
+      - ./config/catalog/pg.properties:/etc/trino/catalog/pg.properties
+      - ./config/catalog/s3.properties:/etc/trino/catalog/s3.properties
+      - ./config/catalog/mysql.properties:/etc/trino/catalog/mysql.properties 
+    ports:
+      - "8080-8089:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - trino-mysql
+      - trino-pg
+      - trino-s3
+      - trino-coordinator
+
