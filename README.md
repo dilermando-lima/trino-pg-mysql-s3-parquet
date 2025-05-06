@@ -3,7 +3,7 @@
 ## ABOUT
 this project demonstrates how to use trino witn one coordinator and multiple workers to process queries from two different databases, process data then save them in parquet format into S3 ( locally )
 
-## ARCHITURE
+## ARCHITETURE
 
 ![ARCHITURE-DIAGRAM](arch.png)
 
